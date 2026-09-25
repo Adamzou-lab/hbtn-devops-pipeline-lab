@@ -1,15 +1,5 @@
-# ---------------------------------------------------------------------------
-# Continuous integration for hbtn-devops-pipeline-lab.
-#
-# HEADS UP: this workflow is DELIBERATELY BROKEN. It ships with three separate
-# faults of three different kinds, and repairing them one commit at a time is
-# the pipeline-repair task.
-#
-# Read the run logs in the Actions tab and let them tell you where to look. Do
-# not rewrite the file from scratch: the exercise is the diagnosis, not the
-# typing. Each fault has its own signature, and fixing one only gets you as far
-# as the next.
-# ---------------------------------------------------------------------------
+# Test every proposed change; publish and deploy only successful pushes to main.
+# The three original faults were repaired in separate fix(ci) commits.
 name: CI
 
 on:
@@ -130,3 +120,26 @@ jobs:
             ${{ steps.image.outputs.latest }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy staging
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    concurrency:
+      group: render-staging
+      cancel-in-progress: false
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Deploy the tested image and verify readiness
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          STAGING_URL: ${{ vars.STAGING_URL }}
+          DEPLOY_IMAGE: ${{ needs.build.outputs.image }}:${{ github.sha }}
+        run: python3 scripts/deploy_render.py
