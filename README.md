@@ -1,10 +1,12 @@
 # hbtn-devops-pipeline-lab
 
+[![CI](https://github.com/Adamzou-lab/hbtn-devops-pipeline-lab/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Adamzou-lab/hbtn-devops-pipeline-lab/actions/workflows/ci.yml?query=branch%3Amain)
+
 This repository contains the application used in the **CI/CD Pipeline Essentials** lab. It is a small Express API backed by PostgreSQL. The application and tests are already implemented; your work is to diagnose and extend its delivery pipeline.
 
-The supplied `.github/workflows/ci.yml` is deliberately broken. Keep those faults in place until the task asks you to diagnose them.
+The original workflow's three intentional faults were diagnosed from real failed runs and repaired in three separate `fix(ci)` commits. The workflow now runs lint and all 11 tests, retains JUnit reports, caches npm downloads, and publishes a tested production image to GHCR on successful pushes to `main`.
 
-The archive has no Git history. Create a public repository named `hbtn-devops-pipeline-lab` in your GitHub account, initialize this directory, make the first commit, and push it to the `main` branch. Later tasks and the automatic checker use that repository name.
+See [DEPLOY.md](DEPLOY.md) for the staging target, credentials, readiness checks, rollback and cleanup. [local_verify.txt](local_verify.txt) records the local container baseline.
 
 ## Repository contents
 
@@ -22,9 +24,10 @@ tests/
   integration/items.int.test.js  3 integration tests that require PostgreSQL
 Dockerfile                        builder and production runtime stages
 docker-compose.yml                local app and database services
-jest.config.js                    Jest configuration; JUnit is installed but disabled
+jest.config.js                    Jest configuration; CI enables JUnit via CLI
 .eslintrc.json                    lint rules used by npm run lint
-.github/workflows/ci.yml          deliberately broken workflow
+.github/workflows/ci.yml          test, image publication and staging deployment
+scripts/deploy_render.py         bounded deployment and readiness verification
 ```
 
 The test suite contains 11 deterministic tests: 8 unit tests and 3 integration tests. Unit tests need only Node.js. Integration tests need a reachable PostgreSQL database.
@@ -63,11 +66,17 @@ docker compose down -v
 
 The Compose `app` service targets the `builder` stage, which includes Jest, Supertest, and ESLint. The pipeline builds the smaller `runtime` stage for deployment.
 
-## Pipeline starting point
+## Pipeline repair evidence
 
-The supplied workflow contains three intentional faults of different kinds. Diagnose them from the Actions annotations and job logs, then repair them one at a time. Do not replace the workflow wholesale: the exercise is to follow each failure to its cause.
+| Failure observed | Focused repair | Evidence |
+| --- | --- | --- |
+| Invalid workflow YAML | Correct `steps` indentation (`79184db`) | [Initial parser failure](https://github.com/Adamzou-lab/hbtn-devops-pipeline-lab/actions/runs/36164109212) |
+| Unknown command `install-deps` | Use the lockfile with `npm ci` (`64f5171`) | [Runner failure](https://github.com/Adamzou-lab/hbtn-devops-pipeline-lab/actions/runs/36164379292) |
+| `DATABASE_URL is not set` | Provide the CI service connection in workflow env (`2adcdc5`) | [Integration failure](https://github.com/Adamzou-lab/hbtn-devops-pipeline-lab/actions/runs/36164541991) |
 
-Later tasks extend the same workflow with dependency caching, JUnit artifacts, an image published to GHCR, and a staging deployment.
+The [repaired test job](https://github.com/Adamzou-lab/hbtn-devops-pipeline-lab/actions/runs/36164671856) passed. The [first cache run](https://github.com/Adamzou-lab/hbtn-devops-pipeline-lab/actions/runs/36165009427) saved npm downloads; the [second run](https://github.com/Adamzou-lab/hbtn-devops-pipeline-lab/actions/runs/36165246181) restored the exact same lockfile key. Both passed lint and 11 tests and uploaded JUnit reports for seven days. The cache contains downloads, not `node_modules`; `npm ci` still installs the reviewed dependency tree each time.
+
+The [publication PR](https://github.com/Adamzou-lab/hbtn-devops-pipeline-lab/pull/1) passed tests with build skipped. Its [merge run](https://github.com/Adamzou-lab/hbtn-devops-pipeline-lab/actions/runs/36165631599) built and published the runtime image, which was independently pulled and verified locally on `/health`.
 
 ## Troubleshooting
 
