@@ -95,11 +95,16 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v4
 
-      - name: Normalize the image name
+      - name: Normalize the image tags for the registry
         id: image
         env:
-          REPOSITORY: ${{ github.repository }}
-        run: echo "name=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          COMMIT_IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
+          LATEST_IMAGE: ghcr.io/${{ github.repository }}:latest
+        run: |
+          commit_image="${COMMIT_IMAGE,,}"
+          latest_image="${LATEST_IMAGE,,}"
+          printf 'name=%s\nsha=%s\nlatest=%s\n' \
+            "${latest_image%:latest}" "$commit_image" "$latest_image" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -121,7 +126,7 @@ jobs:
           target: runtime
           push: true
           tags: |
-            ${{ steps.image.outputs.name }}:${{ github.sha }}
-            ${{ steps.image.outputs.name }}:latest
+            ${{ steps.image.outputs.sha }}
+            ${{ steps.image.outputs.latest }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
